@@ -1,6 +1,176 @@
 {
   "type": "object",
   "properties": {
+    "cc_emails": {
+      "items": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "fwd_emails": {
+      "items": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "reply_cc_emails": {
+      "items": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "ticket_cc_emails": {
+      "items": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "fr_escalated": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "spam": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "email_config_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "group_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "priority": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "requester_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "responder_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "source": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "company_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "status": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "subject": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "association_type": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "to_emails": {
+      "items": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "product_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "due_by": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
+    "fr_due_by": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
+    "is_escalated": {
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
     "custom_fields": {
       "type": ["null", "array"],
       "items": {
@@ -15,230 +185,42 @@
         }
       }
     },
-    "cc_emails": {
-      "items": {
-        "type": [
-          "null", 
-          "string"
-        ]
-      }, 
+    "created_at": {
       "type": [
-        "null", 
-        "array"
-      ]
-    }, 
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
     "updated_at": {
       "type": [
-        "null", 
+        "null",
         "string"
-      ], 
+      ],
       "format": "date-time"
-    }, 
-    "type": {
+    },
+    "associated_tickets_count": {
       "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "to_emails": {
-      "items": {
-        "type": [
-          "null", 
-          "string"
-        ]
-      }, 
-      "type": [
-        "null", 
-        "array"
-      ]
-    }, 
-    "id": {
-      "type": [
-        "null", 
+        "null",
         "integer"
       ]
-    }, 
-    "fwd_emails": {
-      "items": {
-        "type": [
-          "null", 
-          "string"
-        ]
-      }, 
-      "type": [
-        "null", 
-        "array"
-      ]
-    }, 
-    "source": {
-      "type": [
-        "null", 
-        "number"
-      ]
-    }, 
-    "due_by": {
-      "type": [
-        "null", 
-        "string"
-      ], 
-      "format": "date-time"
-    }, 
-    "company_id": {
-      "type": [
-        "null", 
-        "integer"
-      ]
-    }, 
-    "responder_id": {
-      "type": [
-        "null", 
-        "integer"
-      ]
-    }, 
-    "priority": {
-      "type": [
-        "null", 
-        "number"
-      ]
-    }, 
-    "deleted": {
-      "type": [
-        "null", 
-        "boolean"
-      ]
-    }, 
-    "facebook_id": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "subject": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "fr_due_by": {
-      "type": [
-        "null", 
-        "string"
-      ], 
-      "format": "date-time"
-    }, 
-    "email": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "status": {
-      "type": [
-        "null", 
-        "number"
-      ]
-    }, 
-    "is_escalated": {
-      "type": [
-        "null", 
-        "boolean"
-      ]
-    }, 
-    "reply_cc_emails": {
-      "items": {
-        "type": [
-          "null", 
-          "string"
-        ]
-      }, 
-      "type": [
-        "null", 
-        "array"
-      ]
-    }, 
-    "description": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
+    },
     "tags": {
       "items": {
         "type": [
-          "null", 
+          "null",
           "string"
         ]
-      }, 
+      },
       "type": [
-        "null", 
+        "null",
         "array"
       ]
-    }, 
-    "email_config_id": {
+    },
+    "deleted": {
       "type": [
-        "null", 
-        "integer"
-      ]
-    }, 
-    "phone": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "description_text": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "requester_id": {
-      "type": [
-        "null", 
-        "integer"
-      ]
-    }, 
-    "name": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "product_id": {
-      "type": [
-        "null", 
-        "integer"
-      ]
-    }, 
-    "fr_escalated": {
-      "type": [
-        "null", 
+        "null",
         "boolean"
-      ]
-    }, 
-    "created_at": {
-      "type": [
-        "null", 
-        "string"
-      ], 
-      "format": "date-time"
-    }, 
-    "spam": {
-      "type": [
-        "null", 
-        "boolean"
-      ]
-    }, 
-    "twitter_id": {
-      "type": [
-        "null", 
-        "string"
-      ]
-    }, 
-    "group_id": {
-      "type": [
-        "null", 
-        "integer"
       ]
     },
     "company": {
@@ -305,6 +287,20 @@
         "object"
       ],
       "properties": {
+        "agent_responded_at": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "requester_responded_at": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "format": "date-time"
+        },
         "closed_at": {
           "type": [
             "null",
@@ -320,6 +316,27 @@
           "format": "date-time"
         },
         "resolved_at": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "reopenend_at": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "pending_since": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "status_updated_at": {
           "type": [
             "null",
             "string"

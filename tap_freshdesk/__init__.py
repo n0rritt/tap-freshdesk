@@ -9,11 +9,10 @@ from requests.exceptions import HTTPError
 import singer
 
 from tap_freshdesk import utils
+from tap_freshdesk import const
 
 
 REQUIRED_CONFIG_KEYS = ['api_key', 'domain', 'start_date']
-PER_PAGE = 100
-BASE_URL = "https://{}.freshdesk.com"
 CONFIG = {}
 STATE = {}
 
@@ -32,15 +31,16 @@ session = requests.Session()
 
 
 def get_url(endpoint, **kwargs):
-    return BASE_URL.format(CONFIG['domain']) + endpoints[endpoint].format(**kwargs)
+    base_url = "https://{}.freshdesk.com"
+    return base_url.format(CONFIG['domain']) + endpoints[endpoint].format(**kwargs)
 
 
 @backoff.on_exception(backoff.expo,
                       (requests.exceptions.RequestException),
-                      max_tries=5,
+                      max_tries=const.MAX_RETRIES,
                       giveup=lambda e: e.response is not None and 400 <= e.response.status_code < 500,
-                      factor=2)
-@utils.ratelimit(1, 2)
+                      factor=const.BACKOFF_FACTOR)
+@utils.ratelimit(const.RATE_LIMIT_REQUESTS, const.RATE_LIMIT_SECONDS)
 def request(url, params=None):
     params = params or {}
     headers = {}
@@ -71,7 +71,7 @@ def get_start(entity):
 
 def gen_request(url, params=None):
     params = params or {}
-    params["per_page"] = PER_PAGE
+    params["per_page"] = const.PER_PAGE
     page = 1
     while True:
         params['page'] = page
@@ -79,7 +79,7 @@ def gen_request(url, params=None):
         for row in data:
             yield row
 
-        if len(data) == PER_PAGE:
+        if len(data) == const.PER_PAGE:
             page += 1
         else:
             break
@@ -96,35 +96,35 @@ def transform_dict(d, key_key="name", value_key="value", force_str=False):
     return rtn
 
 
-def sync_tickets():
+def sync_tickets(fetch_ticket_status=None, fetch_sub_entities=None):
     bookmark_property = 'updated_at'
 
     singer.write_schema("tickets",
                         utils.load_schema("tickets"),
                         ["id"],
                         bookmark_properties=[bookmark_property])
-
     singer.write_schema("conversations",
                         utils.load_schema("conversations"),
                         ["id"],
                         bookmark_properties=[bookmark_property])
-
     singer.write_schema("satisfaction_ratings",
                         utils.load_schema("satisfaction_ratings"),
                         ["id"],
                         bookmark_properties=[bookmark_property])
-
     singer.write_schema("time_entries",
                         utils.load_schema("time_entries"),
                         ["id"],
                         bookmark_properties=[bookmark_property])
 
-    sync_tickets_by_filter(bookmark_property)
-    sync_tickets_by_filter(bookmark_property, "deleted")
-    sync_tickets_by_filter(bookmark_property, "spam")
+    if 'all' in fetch_ticket_status:
+        sync_tickets_by_filter(bookmark_property, fetch_sub_entities=fetch_sub_entities)
+    if 'all' in fetch_ticket_status or 'deleted' in fetch_ticket_status:
+        sync_tickets_by_filter(bookmark_property, predefined_filter="deleted", fetch_sub_entities=fetch_sub_entities)
+    if 'all' in fetch_ticket_status or 'spam' in fetch_ticket_status:
+        sync_tickets_by_filter(bookmark_property, predefined_filter="spam", fetch_sub_entities=fetch_sub_entities)
 
 
-def sync_tickets_by_filter(bookmark_property, predefined_filter=None):
+def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_entities=None):
     endpoint = "tickets"
 
     state_entity = endpoint
@@ -137,7 +137,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None):
         'updated_since': start,
         'order_by': bookmark_property,
         'order_type': "asc",
-        'include': "requester,company,stats"
+        'include': "company,requester,stats"
     }
 
     if predefined_filter:
@@ -146,64 +146,77 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None):
     if predefined_filter:
         params['filter'] = predefined_filter
 
+    tickets_schema = utils.load_schema('tickets')
+    conversations_schema = utils.load_schema('conversations')
+    ratings_schema = utils.load_schema('satisfaction_ratings')
+    time_entries_schema = utils.load_schema('time_entries')
+
     for i, row in enumerate(gen_request(get_url(endpoint), params)):
         logger.info("Ticket {}: Syncing".format(row['id']))
         row.pop('attachments', None)
         row['custom_fields'] = transform_dict(row['custom_fields'], force_str=True)
 
         # get all sub-entities and save them
-        logger.info("Ticket {}: Syncing conversations".format(row['id']))
 
-        try:
-            for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="conversations")):
-                subrow.pop("attachments", None)
-                subrow.pop("body", None)
-                if subrow[bookmark_property] >= start:
-                    singer.write_record("conversations", subrow, time_extracted=singer.utils.now())
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                logger.info('Invalid ticket ID requested from Freshdesk {0}'.format(row['id']))
-            else:
-                raise
+        if 'conversations' in fetch_sub_entities:
+            try:
+                logger.info("Ticket {}: Syncing conversations".format(row['id']))
+                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="conversations")):
+                    subrow.pop("attachments", None)
+                    subrow.pop("body", None)
+                    if subrow[bookmark_property] >= start:
+                        subrow = utils.reorder_fields_by_schema(subrow, conversations_schema)
+                        singer.write_record("conversations", subrow, time_extracted=singer.utils.now())
+            except HTTPError as e:
+                if e.response.status_code == 403:
+                    logger.info('Invalid ticket ID requested from Freshdesk {0}'.format(row['id']))
+                else:
+                    raise
 
-        try:
-            logger.info("Ticket {}: Syncing satisfaction ratings".format(row['id']))
-            for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="satisfaction_ratings")):
-                subrow['ratings'] = transform_dict(subrow['ratings'], key_key="question")
-                if subrow[bookmark_property] >= start:
-                    singer.write_record("satisfaction_ratings", subrow, time_extracted=singer.utils.now())
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                logger.info("The Surveys feature is unavailable. Skipping the satisfaction_ratings stream.")
-            else:
-                raise
+        if 'satisfaction_ratings' in fetch_sub_entities:
+            try:
+                logger.info("Ticket {}: Syncing satisfaction ratings".format(row['id']))
+                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="satisfaction_ratings")):
+                    subrow['ratings'] = transform_dict(subrow['ratings'], key_key="question")
+                    if subrow[bookmark_property] >= start:
+                        subrow = utils.reorder_fields_by_schema(subrow, ratings_schema)
+                        singer.write_record("satisfaction_ratings", subrow, time_extracted=singer.utils.now())
+            except HTTPError as e:
+                if e.response.status_code == 403:
+                    logger.info("The Surveys feature is unavailable. Skipping the satisfaction_ratings stream.")
+                else:
+                    raise
 
-        try:
-            logger.info("Ticket {}: Syncing time entries".format(row['id']))
-            for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="time_entries")):
-                if subrow[bookmark_property] >= start:
-                    singer.write_record("time_entries", subrow, time_extracted=singer.utils.now())
+        if 'time_entries' in fetch_sub_entities:
+            try:
+                logger.info("Ticket {}: Syncing time entries".format(row['id']))
+                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="time_entries")):
+                    if subrow[bookmark_property] >= start:
+                        subrow = utils.reorder_fields_by_schema(subrow, time_entries_schema)
+                        singer.write_record("time_entries", subrow, time_extracted=singer.utils.now())
 
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                logger.info("The Timesheets feature is unavailable. Skipping the time_entries stream.")
-            elif e.response.status_code == 404:
-                # 404 is being returned for deleted tickets and spam
-                logger.info("Could not retrieve time entries for ticket id {}. This may be caused by tickets "
-                            "marked as spam or deleted.".format(row['id']))
-            else:
-                raise
+            except HTTPError as e:
+                if e.response.status_code == 403:
+                    logger.info("The Timesheets feature is unavailable. Skipping the time_entries stream.")
+                elif e.response.status_code == 404:
+                    # 404 is being returned for deleted tickets and spam
+                    logger.info("Could not retrieve time entries for ticket id {}. This may be caused by tickets "
+                                "marked as spam or deleted.".format(row['id']))
+                else:
+                    raise
 
         utils.update_state(STATE, state_entity, row[bookmark_property])
+        row = utils.reorder_fields_by_schema(row, tickets_schema)
         singer.write_record(endpoint, row, time_extracted=singer.utils.now())
         singer.write_state(STATE)
 
 
 def sync_time_filtered(entity):
     bookmark_property = 'updated_at'
+    entity_schema = utils.load_schema(entity)
 
     singer.write_schema(entity,
-                        utils.load_schema(entity),
+                        entity_schema,
                         ["id"],
                         bookmark_properties=[bookmark_property])
     start = get_start(entity)
@@ -214,6 +227,7 @@ def sync_time_filtered(entity):
             if 'custom_fields' in row:
                 row['custom_fields'] = transform_dict(row['custom_fields'], force_str=True)
 
+            row = utils.reorder_fields_by_schema(row, entity_schema)
             utils.update_state(STATE, entity, row[bookmark_property])
             singer.write_record(entity, row, time_extracted=singer.utils.now())
 
@@ -224,7 +238,10 @@ def do_sync():
     logger.info("Starting FreshDesk sync")
 
     try:
-        sync_tickets()
+        fetch_ticket_status = [k for k, v in CONFIG.get('fetch_ticket_status', {}).items() if v is True]
+        fetch_sub_entities = [k for k, v in CONFIG.get('fetch_sub_entities', {}).items() if v is True]
+
+        sync_tickets(fetch_ticket_status=fetch_ticket_status, fetch_sub_entities=fetch_sub_entities)
         sync_time_filtered("agents")
         sync_time_filtered("roles")
         sync_time_filtered("groups")
@@ -244,6 +261,8 @@ def main_impl():
     config, state = utils.parse_args(REQUIRED_CONFIG_KEYS)
     CONFIG.update(config)
     STATE.update(state)
+    const.RATE_LIMIT_REQUESTS = config.get('rate_limit_requests')
+    const.RATE_LIMIT_SECONDS = config.get('rate_limit_seconds')
     do_sync()
 
 

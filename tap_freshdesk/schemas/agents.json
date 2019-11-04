@@ -40,6 +40,9 @@
       "type": ["null", "string"],
       "format": "date-time"
     },
+    "type": {
+      "type": ["null", "string"]
+    },
     "contact": {
       "type": ["null", "object"],
       "properties": {

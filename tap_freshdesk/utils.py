@@ -47,13 +47,32 @@ def get_abs_path(path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
 
 
-def load_json(path):
+def load_json(path, ordered=False):
+    kwargs = {}
+    if ordered:
+        kwargs['object_pairs_hook'] = collections.OrderedDict
     with open(path) as f:
-        return json.load(f)
+        return json.load(f, **kwargs)
 
 
-def load_schema(entity):
-    return load_json(get_abs_path("schemas/{}.json".format(entity)))
+def load_schema(entity, ordered=True):
+    return load_json(get_abs_path("schemas/{}.json".format(entity)), ordered=ordered)
+
+
+def reorder_fields_by_schema(record, ordered_schema):
+    result = collections.OrderedDict()
+    properties = ordered_schema.get('properties')
+    fields = properties.keys()
+    for key in fields:
+        field_type = properties.get(key).get('type')
+        values = record.get(key)
+        if 'object' in field_type:
+            sub_fields = reorder_fields_by_schema(values, properties.get(key))
+            for k, v in sub_fields.items():
+                result['__'.join([key, k])] = v
+        else:
+            result[key] = values
+    return result
 
 
 def update_state(state, entity, dt):
