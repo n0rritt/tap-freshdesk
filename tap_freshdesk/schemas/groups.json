@@ -1,12 +1,6 @@
 {
   "type": "object",
   "properties": {
-    "agent_ids": {
-      "type": ["null", "array"],
-      "items": {
-        "type": ["null", "integer"]
-      }
-    },
     "auto_ticket_assign": {
       "type": ["null", "boolean"]
     },
@@ -18,6 +12,9 @@
     },
     "escalate_to": {
       "type": ["null", "integer"]
+    },
+    "group_type": {
+      "type": ["null", "string"]
     },
     "id": {
       "type": ["null", "integer"]
