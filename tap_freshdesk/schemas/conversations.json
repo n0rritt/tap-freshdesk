@@ -29,46 +29,25 @@
             "type": ["null", "integer"]
         },
         "to_emails": {
-            "anyOf": [
-                {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "type": "null"
-                }
-            ]
+            "type": ["null", "array"],
+            "items": {
+                "type": "string"
+            }
         },
         "from_email": {
             "type": ["null", "string"]
         },
         "cc_emails": {
-            "anyOf": [
-                {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "type": "null"
-                }
-            ]
+            "type": ["null", "array"],
+            "items": {
+                "type": "string"
+            }
         },
         "bcc_emails": {
-            "anyOf": [
-                {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "type": "null"
-                }
-            ]
+            "type": ["null", "array"],
+            "items": {
+                "type": "string"
+            }
         },
         "email_failure_count": {
             "type": ["null", "integer"]
@@ -77,26 +56,12 @@
             "type": ["null", "integer"]
         },
         "created_at": {
-            "anyOf": [
-                {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                {
-                    "type": "null"
-                }
-            ]
+            "type": ["null" ,"string"],
+            "format": "date-time"
         },
         "updated_at": {
-            "anyOf": [
-                {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                {
-                    "type": "null"
-                }
-            ]
+            "type": ["null", "string"],
+            "format": "date-time"
         }
     }
 }
