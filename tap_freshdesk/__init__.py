@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
 import sys
-import time
 
-import backoff
-import requests
 from requests.exceptions import HTTPError
 import singer
 
-from tap_freshdesk import utils
+from tap_freshdesk import api
 from tap_freshdesk import const
+from tap_freshdesk import utils
 
 
 REQUIRED_CONFIG_KEYS = ['api_key', 'domain', 'start_date']
@@ -27,39 +25,11 @@ endpoints = {
 }
 
 logger = singer.get_logger()
-session = requests.Session()
 
 
 def get_url(endpoint, **kwargs):
     base_url = "https://{}.freshdesk.com"
     return base_url.format(CONFIG['domain']) + endpoints[endpoint].format(**kwargs)
-
-
-@backoff.on_exception(backoff.expo,
-                      (requests.exceptions.RequestException),
-                      max_tries=const.MAX_RETRIES,
-                      giveup=lambda e: e.response is not None and 400 <= e.response.status_code < 500,
-                      factor=const.BACKOFF_FACTOR)
-@utils.ratelimit(const.RATE_LIMIT_REQUESTS, const.RATE_LIMIT_SECONDS)
-def request(url, params=None):
-    params = params or {}
-    headers = {}
-    if 'user_agent' in CONFIG:
-        headers['User-Agent'] = CONFIG['user_agent']
-
-    req = requests.Request('GET', url, params=params, auth=(CONFIG['api_key'], ""), headers=headers).prepare()
-    logger.info("GET {}".format(req.url))
-    resp = session.send(req)
-
-    if 'Retry-After' in resp.headers:
-        retry_after = int(resp.headers['Retry-After'])
-        logger.info("Rate limit reached. Sleeping for {} seconds".format(retry_after))
-        time.sleep(retry_after)
-        return request(url, params)
-
-    resp.raise_for_status()
-
-    return resp
 
 
 def get_start(entity):
@@ -69,13 +39,13 @@ def get_start(entity):
     return STATE[entity]
 
 
-def gen_request(url, params=None):
+def gen_request(client, url, params=None):
     params = params or {}
     params["per_page"] = const.PER_PAGE
     page = 1
     while True:
         params['page'] = page
-        data = request(url, params).json()
+        data = client.request(url, params).json()
         for row in data:
             yield row
 
@@ -96,7 +66,7 @@ def transform_dict(d, key_key="name", value_key="value", force_str=False):
     return rtn
 
 
-def sync_tickets(fetch_ticket_status=None, fetch_sub_entities=None):
+def sync_tickets(client, fetch_ticket_status=None, fetch_sub_entities=None):
     bookmark_property = 'updated_at'
 
     singer.write_schema("tickets",
@@ -117,14 +87,14 @@ def sync_tickets(fetch_ticket_status=None, fetch_sub_entities=None):
                         bookmark_properties=[bookmark_property])
 
     if 'all' in fetch_ticket_status:
-        sync_tickets_by_filter(bookmark_property, fetch_sub_entities=fetch_sub_entities)
+        sync_tickets_by_filter(client, bookmark_property, fetch_sub_entities=fetch_sub_entities)
     if 'all' in fetch_ticket_status or 'deleted' in fetch_ticket_status:
-        sync_tickets_by_filter(bookmark_property, predefined_filter="deleted", fetch_sub_entities=fetch_sub_entities)
+        sync_tickets_by_filter(client, bookmark_property, predefined_filter="deleted", fetch_sub_entities=fetch_sub_entities)
     if 'all' in fetch_ticket_status or 'spam' in fetch_ticket_status:
-        sync_tickets_by_filter(bookmark_property, predefined_filter="spam", fetch_sub_entities=fetch_sub_entities)
+        sync_tickets_by_filter(client, bookmark_property, predefined_filter="spam", fetch_sub_entities=fetch_sub_entities)
 
 
-def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_entities=None):
+def sync_tickets_by_filter(client, bookmark_property, predefined_filter=None, fetch_sub_entities=None):
     endpoint = "tickets"
 
     state_entity = endpoint
@@ -151,7 +121,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_
     ratings_schema = utils.load_schema('satisfaction_ratings')
     time_entries_schema = utils.load_schema('time_entries')
 
-    for i, row in enumerate(gen_request(get_url(endpoint), params)):
+    for i, row in enumerate(gen_request(client, get_url(endpoint), params)):
         logger.info("Ticket {}: Syncing".format(row['id']))
         row.pop('attachments', None)
         row['custom_fields'] = transform_dict(row['custom_fields'], force_str=True)
@@ -161,7 +131,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_
         if 'conversations' in fetch_sub_entities:
             try:
                 logger.info("Ticket {}: Syncing conversations".format(row['id']))
-                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="conversations")):
+                for subrow in gen_request(client, get_url("sub_ticket", id=row['id'], entity="conversations")):
                     subrow.pop("attachments", None)
                     subrow.pop("body", None)
                     if subrow[bookmark_property] >= start:
@@ -176,7 +146,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_
         if 'satisfaction_ratings' in fetch_sub_entities:
             try:
                 logger.info("Ticket {}: Syncing satisfaction ratings".format(row['id']))
-                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="satisfaction_ratings")):
+                for subrow in gen_request(client, get_url("sub_ticket", id=row['id'], entity="satisfaction_ratings")):
                     subrow['ratings'] = transform_dict(subrow['ratings'], key_key="question")
                     if subrow[bookmark_property] >= start:
                         subrow = utils.reorder_fields_by_schema(subrow, ratings_schema)
@@ -190,7 +160,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_
         if 'time_entries' in fetch_sub_entities:
             try:
                 logger.info("Ticket {}: Syncing time entries".format(row['id']))
-                for subrow in gen_request(get_url("sub_ticket", id=row['id'], entity="time_entries")):
+                for subrow in gen_request(client, get_url("sub_ticket", id=row['id'], entity="time_entries")):
                     if subrow[bookmark_property] >= start:
                         subrow = utils.reorder_fields_by_schema(subrow, time_entries_schema)
                         singer.write_record("time_entries", subrow, time_extracted=singer.utils.now())
@@ -211,7 +181,7 @@ def sync_tickets_by_filter(bookmark_property, predefined_filter=None, fetch_sub_
         singer.write_state(STATE)
 
 
-def sync_time_filtered(entity):
+def sync_time_filtered(client, entity):
     bookmark_property = 'updated_at'
     entity_schema = utils.load_schema(entity)
 
@@ -222,7 +192,7 @@ def sync_time_filtered(entity):
     start = get_start(entity)
 
     logger.info("Syncing {} from {}".format(entity, start))
-    for row in gen_request(get_url(entity)):
+    for row in gen_request(client, get_url(entity)):
         if row[bookmark_property] >= start:
             if 'custom_fields' in row:
                 row['custom_fields'] = transform_dict(row['custom_fields'], force_str=True)
@@ -234,20 +204,20 @@ def sync_time_filtered(entity):
     singer.write_state(STATE)
 
 
-def do_sync():
+def do_sync(client):
     logger.info("Starting FreshDesk sync")
 
     try:
         fetch_ticket_status = [k for k, v in CONFIG.get('fetch_ticket_status', {}).items() if v is True]
         fetch_sub_entities = [k for k, v in CONFIG.get('fetch_sub_entities', {}).items() if v is True]
 
-        sync_tickets(fetch_ticket_status=fetch_ticket_status, fetch_sub_entities=fetch_sub_entities)
-        sync_time_filtered("agents")
-        sync_time_filtered("roles")
-        sync_time_filtered("groups")
+        sync_tickets(client, fetch_ticket_status=fetch_ticket_status, fetch_sub_entities=fetch_sub_entities)
+        sync_time_filtered(client, "agents")
+        sync_time_filtered(client, "roles")
+        sync_time_filtered(client, "groups")
         # commenting out this high-volume endpoint for now
-        #sync_time_filtered("contacts")
-        sync_time_filtered("companies")
+        #sync_time_filtered(client, "contacts")
+        sync_time_filtered(client, "companies")
     except HTTPError as e:
         logger.critical(
             "Error making request to Freshdesk API: GET %s: [%s - %s]",
@@ -261,9 +231,8 @@ def main_impl():
     config, state = utils.parse_args(REQUIRED_CONFIG_KEYS)
     CONFIG.update(config)
     STATE.update(state)
-    const.RATE_LIMIT_REQUESTS = config.get('rate_limit_requests')
-    const.RATE_LIMIT_SECONDS = config.get('rate_limit_seconds')
-    do_sync()
+    client = api.FreshdeskClient(config)
+    do_sync(client)
 
 
 def main():
